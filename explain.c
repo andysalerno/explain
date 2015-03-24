@@ -18,6 +18,7 @@ int same(char *, char*);
 FILE *createTempManPage(char *, char *);
 void parseManPage(char *, FILE *);
 char *copyString(char *);
+int isEmptySpace(char *);
 
 
 int main(int argc, char *argv[])
@@ -87,6 +88,7 @@ FILE *createTempManPage(char *args, char *command)
 
 void parseManPage(char *args, FILE *fp)
 {
+    int inDescription = FALSE;
     char *lastLine = NULL;
     char *line = NULL;
     size_t len = 0;
@@ -127,20 +129,33 @@ void parseManPage(char *args, FILE *fp)
             printf("%s", line);
         }
         else if(lastLine){
-            char linecp[strlen(lastLine) + 1];
-            strcpy(linecp, lastLine);
-            char *token = strtok(linecp, " \t");
-            if(token && line && token[1] && token[0] == '-') {
-                if(token[2] && token[2] == '-') {
-                  printf("found one!--%s\n", token[3]);
-                } else {
-                    printf("token2: %c\n", token[2]);
-                    if(contains(args, token[1])) {
-                        printf("%s", lastLine);
-                        printf("%s", line); 
+            if(line && inDescription) { // still in a multi-line description
+                if(isEmptySpace(line)) {
+                    inDescription = FALSE;
+                    printf("\n");
+                }
+                else {
+                    printf("%s", line);
+                }
+            }
+            else {
+                char linecp[strlen(lastLine) + 1];
+                strcpy(linecp, lastLine);
+                char *token = strtok(linecp, " \t");
+                if(token && line && token[1] && token[0] == '-') {
+                    if(token[2] && token[1] == '-') {
+                      //printf("%s\n", lastLine);
+                    }
+                    else {
+                        if(contains(args, token[1])) {
+                            inDescription = TRUE;
+                            printf("%s", lastLine);
+                            printf("%s", line); 
+                        }
                     }
                 }
             }
+
             //printf("%s", line);
         }
         
@@ -153,6 +168,15 @@ void parseManPage(char *args, FILE *fp)
         free(line);
     if(lastLine)
         free(lastLine);
+}
+
+int isEmptySpace(char *line) {
+    while(line && *line != '\0') {
+        if(*line != '\n' && *line != '\t' && *line != ' ')
+            return FALSE;
+        line++;
+    }
+    return TRUE;
 }
 
 int same(char *strA, char *strB)
