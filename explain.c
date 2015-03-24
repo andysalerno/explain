@@ -15,8 +15,10 @@ int argCount(int, char **);
 int buildArgsList(char *const, int, char **);
 int contains(char *const, char);
 int same(char *, char*);
-void testManPage(char *, char *);
+FILE *createTempManPage(char *, char *);
 void parseManPage(char *, FILE *);
+char *copyString(char *);
+
 
 int main(int argc, char *argv[])
 {
@@ -26,10 +28,22 @@ int main(int argc, char *argv[])
     const int countNoDupes = buildArgsList(args, argc, argv);
     args[countNoDupes] = '\0';
     
-    testManPage(args, argv[1]);
+    FILE *manPage = createTempManPage(args, argv[1]);
+    
+    if(manPage)
+        parseManPage(args, manPage);
 }
 
-void testManPage(char *args, char *command)
+/**
+ * Creates a temporary file for holding the man page
+ * output if no existing temp file for that man
+ * page is found. Then it outputs the result
+ * of calling "man [command]" to the temp file.
+ *
+ * Returns an (unclosed) file pointer to the
+ * created temp file.
+ */
+FILE *createTempManPage(char *args, char *command)
 {
     //Determine temp file name
     char tmpFile[strlen("/tmp/exp") + strlen(command) + 1];
@@ -41,13 +55,13 @@ void testManPage(char *args, char *command)
     
     //child executes man
     if(pID == 0) {
-        if(access(tmpFile, F_OK) != 0) { //does tmp file exist?
+        if(access(tmpFile, F_OK) != 0) { //make temp file if necessary
             const int file = open(tmpFile, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
             if(file < 0) {
                 printf("Error creating temp file. Aborting.\n");
-                return;
+                return NULL;
             }
-            dup2(file, 1);
+            dup2(file, 1);  //redirect output to file
             close(file);
             execlp("man", "man", command, (char *) NULL);
         }
@@ -65,21 +79,15 @@ void testManPage(char *args, char *command)
         fp = fopen(tmpFile, "r");
         if(fp == NULL) {
             printf("failure opening tmp file for reading.\n");
-            return;
         }
         
-        printf("parsing man page.\n");
-        parseManPage(args, fp);
-        
-        if(fp) {
-            fclose(fp);
-            fp = NULL;
-        }
+        return fp;
     }
 }
 
 void parseManPage(char *args, FILE *fp)
 {
+    char *lastLine = NULL;
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
@@ -88,72 +96,75 @@ void parseManPage(char *args, FILE *fp)
     int optionsNext = FALSE;
     int optionsDescripNext = FALSE;
     while((read = getline(&line, &len, fp)) != -1) {
-        if(same(line, "NAME\n")) {
-            nameNext = TRUE;
-            optionsNext = FALSE;
-        }
-        else if(nameNext) {
-            printf("%s", line);
-            nameNext = FALSE;
-        }
-        else if(same(line, "OPTIONS\n") || same(line, "DESCRIPTION\n")) {
-            printf("found options (or description)!\n");
-            optionsNext = TRUE;
-            nameNext = FALSE;
-        }
-        else if(optionsNext && !optionsDescripNext) {
-            char *token = NULL;
-            char linecp[strlen(line) + 1];
-            strcpy(linecp, line);
-            token = strtok(linecp, " ");
-            if(token[0] == '-' && contains(args, token[1])) {
-                optionsDescripNext = TRUE;
-                printf("%s", line);
-            }
-        }
-        else if(optionsNext && optionsDescripNext) {
-            printf("%s", line);
-            optionsDescripNext = FALSE;
-        }
-        
-        ////Others
-        //else if(same(line, "DESCRIPTION\n")) {
+        //if(same(line, "NAME\n")) {
+        //    nameNext = TRUE;
         //    optionsNext = FALSE;
+        //}
+        //else if(nameNext) {
+        //    printf("%s", line);
         //    nameNext = FALSE;
         //}
-        //else if(same(line, "FILES\n")) {
-        //    optionsNext = FALSE;
-        //    nameNext = FALSE;
-        //}
-        //else if(same(line, "EXPRESSIONS\n")) {
-        //    optionsNext = FALSE;
-        //    nameNext = FALSE;
-        //}
-        //else if(same(line, "BUGS\n")) {
-        //    optionsNext = FALSE;
-        //    nameNext = FALSE;
-        //}
-        //else if(same(line, "SEE ALSO\n")) {
-        //    optionsNext = FALSE;
-        //    nameNext = FALSE;
-        //}
-        //else if(same(line, "HISTORY\n")) {
-        //    optionsNext = FALSE;
-        //    nameNext = FALSE;
-        //}
-        //else if(same(line, "EXAMPLES\n")) {
+        //else if(same(line, "OPTIONS\n") || same(line, "DESCRIPTION\n")) {
+        //    printf("found options (or description)!\n");
         //    optionsNext = TRUE;
         //    nameNext = FALSE;
         //}
+        //else if(optionsNext && !optionsDescripNext) {
+        //    char *token = NULL;
+        //    char linecp[strlen(line) + 1];
+        //    strcpy(linecp, line);
+        //    token = strtok(linecp, " ");
+        //    if(token[1] && token[0] == '-' && contains(args, token[1])) {
+        //        optionsDescripNext = TRUE;
+        //        printf("%s", line);
+        //    }
+        //}
+        //else if(optionsNext && optionsDescripNext) {
+        //    printf("%s", line);
+        //    optionsDescripNext = FALSE;
+        //}
+        if(lastLine && same(lastLine, "NAME\n")) {
+            printf("%s", line);
+        }
+        else if(lastLine){
+            char linecp[strlen(lastLine) + 1];
+            strcpy(linecp, lastLine);
+            char *token = strtok(linecp, " \t");
+            if(token && line && token[1] && token[0] == '-') {
+                if(token[2] && token[2] == '-') {
+                  printf("found one!--%s\n", token[3]);
+                } else {
+                    printf("token2: %c\n", token[2]);
+                    if(contains(args, token[1])) {
+                        printf("%s", lastLine);
+                        printf("%s", line); 
+                    }
+                }
+            }
+            //printf("%s", line);
+        }
+        
+        if(lastLine)
+            free(lastLine);
+        lastLine = copyString(line);
     }
-    if(line) {
+    
+    if(line)
         free(line);
-    }
+    if(lastLine)
+        free(lastLine);
 }
 
 int same(char *strA, char *strB)
 {
     return !strcmp(strA, strB);
+}
+
+char *copyString(char *original)
+{
+    char *copy = (char *)malloc(strlen(original) + 1);
+    strcpy(copy, original);
+    return copy;
 }
 
 int contains(char *const args, char theChar)
@@ -166,6 +177,11 @@ int contains(char *const args, char theChar)
     return FALSE;
 }
 
+/**
+ * Places each argument in args
+ * without duplicates. Returns
+ * number of unique args
+ */
 int buildArgsList(char *const args, int argc, char *argv[]) {
     int count = 0;
     for(int i = 1; i < argc; i++) {
@@ -184,6 +200,14 @@ int buildArgsList(char *const args, int argc, char *argv[]) {
     return count;
 }
 
+/**
+ * Returns the amount of arguments
+ * found in argv, including "combined"
+ * arguments.
+ * Example: -a returns 1
+ *          -abc returns 3
+ *          -a -b -c returns 3
+ */
 int argCount(int argc, char *argv[])
 {
     int count = 0;
