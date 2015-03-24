@@ -11,17 +11,30 @@
 #define TRUE 1
 #define FALSE 0
 
-#define LIMIT 30 
+/*
+ * Most man pages are formatted such that the description of the argument
+ * is on the line AFTER the argument is stated.  For example, in the man
+ * page for ls:
+ * 
+ *      -a, --all
+ *              do not ignore entries starting with .
+ *
+ * Some man pages, however, start the description on the same line as the
+ * argument.  For example, in the man page for Vim:
+ *
+ *      -A           If Vim has been compiled with Arabic support...
+ *
+ * 
+ */
+#define LIMIT 0 
 
 int argCount(int, char **);
 int buildArgsList(char *const, int, char **);
-int stringHasChar(char *const, char);
 int same(char *, char*);
 FILE *createTempManPage(char *, char *);
 void parseManPage(char *, FILE *);
 char *copyString(char *);
 int isEmptySpace(char *);
-int stringHasSequence(char *const string, char *sequence);
 int stringHasArg(char *const string, char *list);
 
 
@@ -104,13 +117,13 @@ void parseManPage(char *args, FILE *fp)
     int optionsDescripNext = FALSE;
     while((read = getline(&line, &len, fp)) != -1) {
         if(lastLine && same(lastLine, "NAME\n")) {
-            printf("%s", line);
+            printf("%s\n", line);
         }
         else if(lastLine){
             if(inDescription) { // still in a multi-line description
                 if(isEmptySpace(line)) {
                     inDescription = FALSE;
-                    //printf("\n");
+                    printf("\n");
                 }
                 else {
                     //some man pages have the description on the same
@@ -128,7 +141,7 @@ void parseManPage(char *args, FILE *fp)
                       //is a double, eg --color
                     }
                     else {
-                        if(stringHasChar(args, token[1]) || stringHasArg(lastLine, args)) {
+                        if(strchr(args, token[1]) || (read < LIMIT && stringHasArg(lastLine, args))) {
                             printf("%s", lastLine);
                             if(isEmptySpace(line) == FALSE) {    
                                 inDescription = TRUE;
@@ -172,41 +185,11 @@ char *copyString(char *original)
     return copy;
 }
 
-int stringHasChar(char *const args, char theChar)
-{
-    const int len = strlen(args);
-    for(int i = 0; i < len; i++) {
-        if(args[i] == theChar) {
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-
-int stringHasSequence(char *const string, char *sequence)
-{
-    const int stringLen = strlen(string);
-    const int seqLen = strlen(sequence);
-    if(stringLen < seqLen)
-        return FALSE;
-    if(seqLen == 1)
-        return stringHasChar(string, sequence[0]);
-    
-    for(int i = 0; i < stringLen; i++) {
-        if(string[i] == sequence[0]) {
-            for(int j = 1; j + i < stringLen && j < seqLen; j++) {
-                if(string[j+i] != sequence[j])
-                    break;
-                if(j == (seqLen - 1))
-                    return TRUE;
-            }
-        }
-    }
-    return FALSE;
-}
-
 /*
- * 
+ * Return TRUE iff string contains any of
+ * the chars in list, preceded by -
+ * Ex: if string is "-R, -r, --recursive"
+ * and list is "qrs", returns true.
  */
 int stringHasArg(char *const string, char *list)
 {
@@ -214,7 +197,7 @@ int stringHasArg(char *const string, char *list)
     char buf[2];
     for(int i = 0; i < len; i++) {
         sprintf(buf, "-%c", list[i]);
-        if(stringHasSequence(string, buf)) {
+        if(strstr(string, buf)) {
             return TRUE;
         }
     }
@@ -233,7 +216,7 @@ int buildArgsList(char *const args, int argc, char *argv[]) {
         const int argLen = strlen(argv[i]);
         if(curArg[0] == '-') {
             for(int j = 1; j < argLen; j++) {
-                if(!stringHasChar(args, curArg[j])) {
+                if(!strchr(args, curArg[j])) {
                     args[count] = curArg[j];
                     count++;     
                 }
