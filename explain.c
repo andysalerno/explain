@@ -11,6 +11,8 @@
 #define TRUE 1
 #define FALSE 0
 
+#define LIMIT 30 
+
 int argCount(int, char **);
 int buildArgsList(char *const, int, char **);
 int contains(char *const, char);
@@ -129,12 +131,15 @@ void parseManPage(char *args, FILE *fp)
             printf("%s", line);
         }
         else if(lastLine){
-            if(line && inDescription) { // still in a multi-line description
+            if(inDescription) { // still in a multi-line description
                 if(isEmptySpace(line)) {
                     inDescription = FALSE;
-                    printf("\n");
+                    //printf("\n");
                 }
                 else {
+                    //some man pages have the description on the same
+                    //line as the argument (eg: -c    will do a copy)
+                    //
                     printf("%s", line);
                 }
             }
@@ -148,9 +153,11 @@ void parseManPage(char *args, FILE *fp)
                     }
                     else {
                         if(contains(args, token[1])) {
-                            inDescription = TRUE;
                             printf("%s", lastLine);
-                            printf("%s", line); 
+                            if(isEmptySpace(line) == FALSE) {    
+                                inDescription = TRUE;
+                                printf("%s", line);
+                            }
                         }
                     }
                 }
