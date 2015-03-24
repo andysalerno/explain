@@ -26,7 +26,8 @@
  *
  * 
  */
-#define LIMIT 0 
+#define LIMIT 30
+#define MORE 1
 
 int argCount(int, char **);
 int buildArgsList(char *const, int, char **);
@@ -135,13 +136,13 @@ void parseManPage(char *args, FILE *fp)
             else {
                 char linecp[strlen(lastLine) + 1];
                 strcpy(linecp, lastLine);
-                char *token = strtok(linecp, " \t");
+                char *token = strtok(linecp, " \t"); //first token of lastLine
                 if(token && token[1] && token[0] == '-') {
                     if(token[2] && token[1] == '-') {
                       //is a double, eg --color
                     }
                     else {
-                        if(strchr(args, token[1]) || (read < LIMIT && stringHasArg(lastLine, args))) {
+                        if(strchr(args, token[1]) || (MORE && read < LIMIT && stringHasArg(lastLine, args))) {
                             printf("%s", lastLine);
                             if(isEmptySpace(line) == FALSE) {    
                                 inDescription = TRUE;
@@ -198,6 +199,7 @@ int stringHasArg(char *const string, char *list)
     for(int i = 0; i < len; i++) {
         sprintf(buf, "-%c", list[i]);
         if(strstr(string, buf)) {
+            printf("[%s] has [%s]\n", string, buf);
             return TRUE;
         }
     }
