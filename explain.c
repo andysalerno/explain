@@ -15,12 +15,15 @@
 
 int argCount(int, char **);
 int buildArgsList(char *const, int, char **);
-int contains(char *const, char);
+int stringHasChar(char *const, char);
 int same(char *, char*);
 FILE *createTempManPage(char *, char *);
 void parseManPage(char *, FILE *);
 char *copyString(char *);
 int isEmptySpace(char *);
+int stringHasSequence(char *const string, char *sequence);
+int stringHasArg(char *const string, char *list);
+
 
 
 int main(int argc, char *argv[])
@@ -100,33 +103,6 @@ void parseManPage(char *args, FILE *fp)
     int optionsNext = FALSE;
     int optionsDescripNext = FALSE;
     while((read = getline(&line, &len, fp)) != -1) {
-        //if(same(line, "NAME\n")) {
-        //    nameNext = TRUE;
-        //    optionsNext = FALSE;
-        //}
-        //else if(nameNext) {
-        //    printf("%s", line);
-        //    nameNext = FALSE;
-        //}
-        //else if(same(line, "OPTIONS\n") || same(line, "DESCRIPTION\n")) {
-        //    printf("found options (or description)!\n");
-        //    optionsNext = TRUE;
-        //    nameNext = FALSE;
-        //}
-        //else if(optionsNext && !optionsDescripNext) {
-        //    char *token = NULL;
-        //    char linecp[strlen(line) + 1];
-        //    strcpy(linecp, line);
-        //    token = strtok(linecp, " ");
-        //    if(token[1] && token[0] == '-' && contains(args, token[1])) {
-        //        optionsDescripNext = TRUE;
-        //        printf("%s", line);
-        //    }
-        //}
-        //else if(optionsNext && optionsDescripNext) {
-        //    printf("%s", line);
-        //    optionsDescripNext = FALSE;
-        //}
         if(lastLine && same(lastLine, "NAME\n")) {
             printf("%s", line);
         }
@@ -147,12 +123,12 @@ void parseManPage(char *args, FILE *fp)
                 char linecp[strlen(lastLine) + 1];
                 strcpy(linecp, lastLine);
                 char *token = strtok(linecp, " \t");
-                if(token && line && token[1] && token[0] == '-') {
+                if(token && token[1] && token[0] == '-') {
                     if(token[2] && token[1] == '-') {
-                      //printf("%s\n", lastLine);
+                      //is a double, eg --color
                     }
                     else {
-                        if(contains(args, token[1])) {
+                        if(stringHasChar(args, token[1]) || stringHasArg(lastLine, args)) {
                             printf("%s", lastLine);
                             if(isEmptySpace(line) == FALSE) {    
                                 inDescription = TRUE;
@@ -162,8 +138,6 @@ void parseManPage(char *args, FILE *fp)
                     }
                 }
             }
-
-            //printf("%s", line);
         }
         
         if(lastLine)
@@ -198,10 +172,49 @@ char *copyString(char *original)
     return copy;
 }
 
-int contains(char *const args, char theChar)
+int stringHasChar(char *const args, char theChar)
 {
-    for(int i = 0; args[i] != '\0'; i++) {
+    const int len = strlen(args);
+    for(int i = 0; i < len; i++) {
         if(args[i] == theChar) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+int stringHasSequence(char *const string, char *sequence)
+{
+    const int stringLen = strlen(string);
+    const int seqLen = strlen(sequence);
+    if(stringLen < seqLen)
+        return FALSE;
+    if(seqLen == 1)
+        return stringHasChar(string, sequence[0]);
+    
+    for(int i = 0; i < stringLen; i++) {
+        if(string[i] == sequence[0]) {
+            for(int j = 1; j + i < stringLen && j < seqLen; j++) {
+                if(string[j+i] != sequence[j])
+                    break;
+                if(j == (seqLen - 1))
+                    return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+/*
+ * 
+ */
+int stringHasArg(char *const string, char *list)
+{
+    const int len = strlen(list);
+    char buf[2];
+    for(int i = 0; i < len; i++) {
+        sprintf(buf, "-%c", list[i]);
+        if(stringHasSequence(string, buf)) {
             return TRUE;
         }
     }
@@ -220,7 +233,7 @@ int buildArgsList(char *const args, int argc, char *argv[]) {
         const int argLen = strlen(argv[i]);
         if(curArg[0] == '-') {
             for(int j = 1; j < argLen; j++) {
-                if(!contains(args, curArg[j])) {
+                if(!stringHasChar(args, curArg[j])) {
                     args[count] = curArg[j];
                     count++;     
                 }
