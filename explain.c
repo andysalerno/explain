@@ -142,7 +142,7 @@ void parseManPage(char *args, FILE *fp)
                       //is a double, eg --color
                     }
                     else {
-                        if(strchr(args, token[1]) || (MORE && read < LIMIT && stringHasArg(lastLine, args))) {
+                        if(strchr(args, token[1]) || (MORE && stringHasArg(lastLine, args))) {
                             printf("%s", lastLine);
                             if(isEmptySpace(line) == FALSE) {    
                                 inDescription = TRUE;
@@ -194,15 +194,31 @@ char *copyString(char *original)
  */
 int stringHasArg(char *const string, char *list)
 {
-    const int len = strlen(list);
-    char buf[2];
-    for(int i = 0; i < len; i++) {
-        sprintf(buf, "-%c", list[i]);
-        if(strstr(string, buf)) {
-            printf("[%s] has [%s]\n", string, buf);
+    //const int len = strlen(list);
+    //char buf[2];
+    //for(int i = 0; i < len; i++) {
+    //    sprintf(buf, "-%c", list[i]);
+    //    if(strstr(string, buf)) {
+    //        printf("[%s] has [%s]\n", string, buf);
+    //        return TRUE;
+    //    }
+    //}
+    //return FALSE;
+
+    char *const copy = copyString(string);
+    char *token = strtok(copy, " ");
+    while(token != NULL) {
+        if(token[0] != '-') {
+            free(copy);
+            return FALSE;
+        }
+        else if(strchr(list, token[1])) {
+            free(copy);
             return TRUE;
         }
+        token = strtok(NULL, " ");
     }
+    free(copy);
     return FALSE;
 }
 
