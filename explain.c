@@ -11,6 +11,15 @@
 #define TRUE 1
 #define FALSE 0
 
+#define SHORT 0
+#define LONG 1
+#define NA 2
+
+#define DEBUG 1
+
+#define SUCCESS 0
+#define FAILURE 1
+
 /*
  * Most man pages are formatted such that the description of the argument
  * is on the line AFTER the argument is stated.  For example, in the man
@@ -29,29 +38,46 @@
 #define LIMIT 30
 #define MORE 1
 
-int argCount(int, char **);
-int buildArgsList(char *const, int, char **);
+int buildOptLists(int, char **, char **, char ***);
+//int buildArgsList(char *const, int, char **);
 int same(char *, char*);
-FILE *createTempManPage(char *, char *);
-void parseManPage(char *, FILE *);
+FILE *createTempManPage(char *);
+void parseManPage(FILE *, char *, char **);
 char *copyString(char *);
 int isEmptySpace(char *);
 int stringHasArg(char *const string, char *list);
+int optType(char *opt);
+int stringInList(char **list, char *string);
+int stringHasLongOpt(char *const string, char *opt);
+
+void db(char *);
+void dbi(char *, int);
+void dbs(char *message, char *string);
+int countSmallOpts(int argc, char *argv[]);
 
 
 
 int main(int argc, char *argv[])
 {
-    const int count = argCount(argc, argv);
-    char args[count + 1];
+    if(argc < 3) {
+        printf("Usage: explain command opt1 opt2 opt3...\n");
+        exit(1);
+    }
     
-    const int countNoDupes = buildArgsList(args, argc, argv);
-    args[countNoDupes] = '\0';
+    char *smallOpts = NULL; // -a, -abc, etc
+    char **longOpts = NULL;  // --std=c99, --silent, etc
+    if(buildOptLists(argc, argv, &smallOpts, &longOpts) > 0) {
+        return FAILURE;
+    }
     
-    FILE *manPage = createTempManPage(args, argv[1]);
+    //char args[count + 1];    
+    //const int countNoDupes = buildArgsList(args, argc, argv);
+    //args[countNoDupes] = '\0';
+    
+    FILE *manPage = createTempManPage(argv[1]);
     
     if(manPage)
-        parseManPage(args, manPage);
+        parseManPage(manPage, smallOpts, longOpts);
 }
 
 /**
@@ -63,11 +89,12 @@ int main(int argc, char *argv[])
  * Returns an (unclosed) file pointer to the
  * created temp file.
  */
-FILE *createTempManPage(char *args, char *command)
+FILE *createTempManPage(char *command)
 {
     //Determine temp file name
-    char tmpFile[strlen("/tmp/exp") + strlen(command) + 1];
-    strcpy(tmpFile, "/tmp/exp");
+    const char const* tempLocation = "/tmp/exp";
+    char tmpFile[strlen(tempLocation) + strlen(command) + 1];
+    strcpy(tmpFile, tempLocation);
     strcat(tmpFile, command);
     printf("temp file: %s\n", tmpFile);
     
@@ -105,7 +132,8 @@ FILE *createTempManPage(char *args, char *command)
     }
 }
 
-void parseManPage(char *args, FILE *fp)
+//void parseManPage(char *args, FILE *fp)
+void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
 {
     int inDescription = FALSE;
     char *lastLine = NULL;
@@ -113,9 +141,6 @@ void parseManPage(char *args, FILE *fp)
     size_t len = 0;
     ssize_t read;
     
-    int nameNext = FALSE;
-    int optionsNext = FALSE;
-    int optionsDescripNext = FALSE;
     while((read = getline(&line, &len, fp)) != -1) {
         if(lastLine && same(lastLine, "NAME\n")) {
             printf("%s\n", line);
@@ -136,18 +161,23 @@ void parseManPage(char *args, FILE *fp)
             else {
                 char linecp[strlen(lastLine) + 1];
                 strcpy(linecp, lastLine);
-                char *token = strtok(linecp, " \t"); //first token of lastLine
-                if(token && token[1] && token[0] == '-') {
-                    if(token[2] && token[1] == '-') {
-                      //is a double, eg --color
+                char *token = strtok(linecp, " \t\n"); // first token of lastLine
+                const int type = optType(token);
+                if(type == LONG) {                
+                    if(stringInList(longOpts, &token[2])) { // || (MORE && stringHasLongOpts(lastLine, longOpts))) { // TOFIX don't make check here, if you're here the first token is long, and a long might be hidden behind a short
+                        printf(lastLine);
+                        if(isEmptySpace(line) == FALSE) {
+                            inDescription = TRUE;
+                            printf(line);
+                        }
                     }
-                    else {
-                        if(strchr(args, token[1]) || (MORE && stringHasArg(lastLine, args))) {
-                            printf("%s", lastLine);
-                            if(isEmptySpace(line) == FALSE) {    
-                                inDescription = TRUE;
-                                printf("%s", line);
-                            }
+                }
+                else if(type == SHORT) {
+                    if(strchr(smallOpts, token[1]) || (MORE && stringHasArg(lastLine, smallOpts))) {
+                        printf("%s", lastLine);
+                        if(isEmptySpace(line) == FALSE) {    
+                            inDescription = TRUE;
+                            printf("%s", line);
                         }
                     }
                 }
@@ -163,6 +193,41 @@ void parseManPage(char *args, FILE *fp)
         free(line);
     if(lastLine)
         free(lastLine);
+}
+
+int stringInList(char **list, char *string)
+{
+    if(!list || !(*list) || !string) {
+        printf("Something went wrong while checking the list of strings.\n");
+        return FALSE;
+    }
+            
+    int i = 0;
+    char *curString = list[i];
+    while(curString != NULL) {
+        if(same(curString, string)) {
+            return TRUE;
+        }
+        i++;
+        curString = list[i];
+    }
+    return FALSE;
+}
+
+int optType(char *opt)
+{
+    if(!opt || strlen(opt) < 1) {
+        return NA;
+    }
+    const int len = strlen(opt);
+    if (len > 2 && opt[0] == '-' && opt[1] == '-') {
+        return LONG;
+    }
+    else if (len >= 2 && opt[0] == '-') {
+        return SHORT;
+    }
+    
+    return NA;
 }
 
 int isEmptySpace(char *line) {
@@ -194,17 +259,6 @@ char *copyString(char *original)
  */
 int stringHasArg(char *const string, char *list)
 {
-    //const int len = strlen(list);
-    //char buf[2];
-    //for(int i = 0; i < len; i++) {
-    //    sprintf(buf, "-%c", list[i]);
-    //    if(strstr(string, buf)) {
-    //        printf("[%s] has [%s]\n", string, buf);
-    //        return TRUE;
-    //    }
-    //}
-    //return FALSE;
-
     char *const copy = copyString(string);
     char *token = strtok(copy, " ");
     while(token != NULL) {
@@ -212,7 +266,7 @@ int stringHasArg(char *const string, char *list)
             free(copy);
             return FALSE;
         }
-        else if(strchr(list, token[1])) {
+        else if(token[1] && strchr(list, token[1])) {
             free(copy);
             return TRUE;
         }
@@ -222,45 +276,107 @@ int stringHasArg(char *const string, char *list)
     return FALSE;
 }
 
-/**
- * Places each argument in args
- * without duplicates. Returns
- * number of unique args
- */
-int buildArgsList(char *const args, int argc, char *argv[]) {
-    int count = 0;
-    for(int i = 1; i < argc; i++) {
-        char *const curArg = argv[i];
-        const int argLen = strlen(argv[i]);
-        if(curArg[0] == '-') {
-            for(int j = 1; j < argLen; j++) {
-                if(!strchr(args, curArg[j])) {
-                    args[count] = curArg[j];
-                    count++;     
-                }
-
+int stringHasLongOpt(char *const string, char *opt)
+{
+    char *const copy = copyString(string);
+    char *token = strtok(copy, " ,;\n");
+    while(token != NULL) {
+        if(token[0] && token[0] == '-' && token[1] && token[1] == '-' && token[2]) { // less pretty than strlen, but simpler
+            printf("[%s] v [%s]\n", &token[2], opt);
+            if(same(&token[2], opt)) {
+                free(copy);
+                return TRUE;
             }
         }
+        token = strtok(NULL, " ,;");
     }
+    free(copy);
+    return FALSE;
+}
+
+int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
+{    
+    dbi("buildOptLists w argc", argc);
+    /**
+     * Allocate a string of length argc to hold the "small" options (-r, -A, etc).
+     * This one string will be a concatenation of each small opt.
+     */
+    *smallOpts = (char *)malloc(countSmallOpts(argc, argv) + 1); // max of argc-1 smallOpts + '\0'
+    char *const smallPtr = *smallOpts; // convenience pointer
+    if(!smallPtr) {
+        printf("Malloc error, quitting.\n");
+        return FAILURE;
+    }
+    smallPtr[0] = '\0';
+    
+    /**
+     * Allocate an array of string pointers for "long" options (--quiet, --color=blue, etc)
+     * of size argc
+     */
+    *longOpts = (char **)malloc(sizeof(char *) * argc); // welcome to pointer hell
+    char **longPtr = *longOpts; // convenience pointer
+    if(!longPtr) {
+        printf("Malloc error, quitting.\n");
+        return FAILURE;
+    }
+    longPtr[0] = NULL;
+    
+    db("    past mallocs");
+    
+    /**
+     * Populate our opt lists
+     */
+    int longCount = 0;
+    for(int i = 2; i < argc; i++) {
+        dbs("    arg: ", argv[i]);
+        dbi("        is argv", i);
+        char *const curArg = argv[i];
+        const int type = optType(curArg);
+        if(type == LONG) {
+            db("        is long opt");
+            char *const longOpt = (char *)malloc(strlen(curArg-1)); // +1 (for '\0'), -2 (for --) = -1
+            strcpy(longOpt, &curArg[2]); // copy Opt from --Opt
+            longPtr[longCount] = longOpt;
+            longPtr[longCount+1] = NULL;
+            longCount++;
+        }
+        else if(type == SHORT) {
+            db("        is short opt");
+            strcat(smallPtr, &curArg[1]);
+        }
+    }
+    
+    db("    returning from buildOptLists");
+    return SUCCESS;
+}
+
+int countSmallOpts(int argc, char *argv[])
+{
+    int count = 0;
+    for(int i = 2; i < argc; i++) {
+        char *const curArg = argv[i];
+        if(curArg[0] == '-' && curArg[1] && curArg[1] != '-' && curArg[1] != '\0') {
+            count += strlen(&curArg[1]);
+        }
+    }
+    dbi("counted", count);
     return count;
 }
 
-/**
- * Returns the amount of arguments
- * found in argv, including "combined"
- * arguments.
- * Example: -a returns 1
- *          -abc returns 3
- *          -a -b -c returns 3
- */
-int argCount(int argc, char *argv[])
+void db(char *message)
 {
-    int count = 0;
-    for(int i = 1; i < argc; i++) {
-        char *const curArg = argv[i];
-        if(curArg[0] == '-') {
-            count += strlen(curArg) - 1;
-        }
-    }
-    return count;
+    if(DEBUG)
+        printf("[debug] %s\n", message);
+}
+
+void dbi(char *message, int i)
+{
+    if(DEBUG)
+        printf("[debug] %s: %d\n", message, i);
+}
+
+void dbs(char *message, char *string)
+{
+    if(DEBUG)
+        printf("[debug] %s %s\n", message, string);
 }
