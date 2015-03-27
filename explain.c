@@ -47,13 +47,14 @@ char *copyString(char *);
 int isEmptySpace(char *);
 int stringHasArg(char *const string, char *list);
 int optType(char *opt);
-int stringInList(char **list, char *string);
 int stringHasLongOpt(char *const string, char *opt);
+int listContains(char **list, char *string);
 
 void db(char *);
 void dbi(char *, int);
 void dbs(char *message, char *string);
 int countSmallOpts(int argc, char *argv[]);
+int lineMatchesList(char *line, char **list);
 
 
 
@@ -70,14 +71,13 @@ int main(int argc, char *argv[])
         return FAILURE;
     }
     
-    //char args[count + 1];    
-    //const int countNoDupes = buildArgsList(args, argc, argv);
-    //args[countNoDupes] = '\0';
-    
     FILE *manPage = createTempManPage(argv[1]);
     
-    if(manPage)
+    if(manPage) {
         parseManPage(manPage, smallOpts, longOpts);
+        free(manPage);
+    }
+    free(smallOpts);
 }
 
 /**
@@ -143,7 +143,7 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
     
     while((read = getline(&line, &len, fp)) != -1) {
         if(lastLine && same(lastLine, "NAME\n")) {
-            printf("%s\n", line);
+            printf("%s", line);
         }
         else if(lastLine){
             if(inDescription) { // still in a multi-line description
@@ -163,21 +163,27 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
                 strcpy(linecp, lastLine);
                 char *token = strtok(linecp, " \t\n"); // first token of lastLine
                 const int type = optType(token);
-                if(type == LONG) {                
-                    if(stringInList(longOpts, &token[2])) { // || (MORE && stringHasLongOpts(lastLine, longOpts))) { // TOFIX don't make check here, if you're here the first token is long, and a long might be hidden behind a short
+                if(type != NA) {
+                    if(type == LONG && listContains(longOpts, &token[2])) {
                         printf(lastLine);
                         if(isEmptySpace(line) == FALSE) {
                             inDescription = TRUE;
                             printf(line);
                         }
                     }
-                }
-                else if(type == SHORT) {
-                    if(strchr(smallOpts, token[1]) || (MORE && stringHasArg(lastLine, smallOpts))) {
-                        printf("%s", lastLine);
-                        if(isEmptySpace(line) == FALSE) {    
+                    else if(type == SHORT && strchr(smallOpts, token[1])) {
+                        printf(lastLine);
+                        if(isEmptySpace(line) == FALSE) {
                             inDescription = TRUE;
-                            printf("%s", line);
+                            printf(line);
+                        }
+                    }
+                    
+                    else if(MORE && (lineMatchesList(lastLine, longOpts) || stringHasArg(lastLine, smallOpts))) {
+                        printf(lastLine);
+                        if(isEmptySpace(line) == FALSE) {
+                            inDescription = TRUE;
+                            printf(line);
                         }
                     }
                 }
@@ -195,21 +201,26 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
         free(lastLine);
 }
 
-int stringInList(char **list, char *string)
+int lineMatchesList(char *line, char **list)
 {
-    if(!list || !(*list) || !string) {
-        printf("Something went wrong while checking the list of strings.\n");
-        return FALSE;
-    }
-            
-    int i = 0;
-    char *curString = list[i];
-    while(curString != NULL) {
-        if(same(curString, string)) {
+    char *copy = copyString(line);
+    char *token = strtok(copy, " ,;\n");
+    for(int i = 0; token != NULL && token[0] && token[0] == '-'; i++) {
+        if(strlen(token) >= 3 && token[0] == '-' && token[1] == '-' && listContains(list, &token[2])) {
+            free(copy);
             return TRUE;
         }
-        i++;
-        curString = list[i];
+        token = strtok(NULL, " ,;\n");
+    }
+    free(copy);
+    return FALSE;
+}
+
+int listContains(char **list, char *string)
+{
+    for(int i = 0; list[i] != NULL; i++) {
+        if(same(list[i], string))
+            return TRUE;
     }
     return FALSE;
 }
@@ -275,6 +286,7 @@ int stringHasArg(char *const string, char *list)
     free(copy);
     return FALSE;
 }
+
 
 int stringHasLongOpt(char *const string, char *opt)
 {
