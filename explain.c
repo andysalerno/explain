@@ -49,6 +49,7 @@ int stringHasArg(char *const string, char *list);
 int optType(char *opt);
 int stringHasLongOpt(char *const string, char *opt);
 int listContains(char **list, char *string);
+void freeList(char **list);
 
 void db(char *);
 void dbi(char *, int);
@@ -75,9 +76,10 @@ int main(int argc, char *argv[])
     
     if(manPage) {
         parseManPage(manPage, smallOpts, longOpts);
-        free(manPage);
+        fclose(manPage);
     }
     free(smallOpts);
+    freeList(longOpts);
 }
 
 /**
@@ -113,7 +115,7 @@ FILE *createTempManPage(char *command)
             execlp("man", "man", command, (char *) NULL);
         }
         printf("tmp file already existed!\n");
-        exit(0);
+        return NULL;
     }
     
     //parent waits and operates on result
@@ -190,15 +192,18 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
             }
         }
         
-        if(lastLine)
+        if(lastLine) {
             free(lastLine);
+            
+        }
         lastLine = copyString(line);
     }
     
-    if(line)
-        free(line);
-    if(lastLine)
-        free(lastLine);
+    free(line);
+    free(lastLine);
+    
+    
+
 }
 
 int lineMatchesList(char *line, char **list)
@@ -258,6 +263,7 @@ int same(char *strA, char *strB)
 char *copyString(char *original)
 {
     char *copy = (char *)malloc(strlen(original) + 1);
+    
     strcpy(copy, original);
     return copy;
 }
@@ -314,6 +320,7 @@ int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
      * This one string will be a concatenation of each small opt.
      */
     *smallOpts = (char *)malloc(countSmallOpts(argc, argv) + 1); // max of argc-1 smallOpts + '\0'
+    
     char *const smallPtr = *smallOpts; // convenience pointer
     if(!smallPtr) {
         printf("Malloc error, quitting.\n");
@@ -326,6 +333,7 @@ int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
      * of size argc
      */
     *longOpts = (char **)malloc(sizeof(char *) * argc); // welcome to pointer hell
+    
     char **longPtr = *longOpts; // convenience pointer
     if(!longPtr) {
         printf("Malloc error, quitting.\n");
@@ -346,7 +354,8 @@ int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
         const int type = optType(curArg);
         if(type == LONG) {
             db("        is long opt");
-            char *const longOpt = (char *)malloc(strlen(curArg-1)); // +1 (for '\0'), -2 (for --) = -1
+            char *const longOpt = (char *)malloc(strlen(curArg) - 1); // +1 (for '\0'), -2 (for --) = -1
+            
             strcpy(longOpt, &curArg[2]); // copy Opt from --Opt
             longPtr[longCount] = longOpt;
             longPtr[longCount+1] = NULL;
@@ -373,6 +382,16 @@ int countSmallOpts(int argc, char *argv[])
     }
     dbi("counted", count);
     return count;
+}
+
+void freeList(char **list)
+{
+    for(int i = 0; list[i] != NULL; i++) {
+        free(list[i]);
+        
+    }
+    free(list);
+    
 }
 
 void db(char *message)
