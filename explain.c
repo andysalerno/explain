@@ -13,30 +13,22 @@
 #define LONG 1
 #define NA 2
 
-#define DEBUG 1
-
 #define SUCCESS 0
 #define FAILURE 1
 
 int buildOptLists(int, char **, char **, char ***);
-//int buildArgsList(char *const, int, char **);
-int same(char *, char*);
+bool same(char *, char*);
 FILE *createTempManPage(char *);
 void parseManPage(FILE *, char *, char **);
 char *copyString(char *);
-int isEmptySpace(char *);
-int stringHasArg(char *const string, char *list);
+bool isEmptySpace(char *);
+bool stringHasArg(char *const string, char *list);
 int optType(char *opt);
-int stringHasLongOpt(char *const string, char *opt);
-int listContains(char **list, char *string);
+bool stringHasLongOpt(char *const string, char *opt);
+bool listContains(char **list, char *string);
 void freeList(char **list);
-
-void db(char *);
-void dbi(char *, int);
-void dbs(char *message, char *string);
 int countSmallOpts(int argc, char *argv[]);
-int lineMatchesList(char *line, char **list);
-
+bool lineMatchesList(char *line, char **list);
 
 
 int main(int argc, char *argv[])
@@ -57,9 +49,73 @@ int main(int argc, char *argv[])
     if(manPage) {
         parseManPage(manPage, smallOpts, longOpts);
         fclose(manPage);
+    } else {
+        printf("Error creating temporary file. Aborting.\n");
     }
     free(smallOpts);
     freeList(longOpts);
+}
+
+/**
+ * Populates smallOpts, a string, and longOpts, a list of strings, based upon
+ * the options found in argv.
+ *
+ * Example: if argv is: {explain, ls, -a, -bc, --author, --recursive}
+ * Then smallOpts will be string "abc," and longOpts will hold two pointers:
+ * one to a string "author," another to a string "recursive."
+ *
+ * Both smallOpts, longOpts, and the strings pointed to by longOpts will
+ * need to be freed after calling this method.
+ */
+int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
+{
+    /**
+     * Allocate string for "small" options (-a, -b, -cdef)
+     */
+    *smallOpts = (char *)malloc(countSmallOpts(argc, argv) + 1);
+    
+    char *const smallPtr = *smallOpts; // convenience pointer
+    if(!smallPtr) {
+        printf("Allocation error, quitting.\n");
+        return FAILURE;
+    }
+    smallPtr[0] = '\0';
+    
+    /**
+     * Allocate an array of string pointers for "long" options (--quiet, --color=blue, etc)
+     * of size argc
+     */
+    *longOpts = (char **)malloc(sizeof(char *) * argc); // glimpse of pointer hell
+    
+    char **longPtr = *longOpts; // convenience pointer
+    if(!longPtr) {
+        printf("Malloc error, quitting.\n");
+        return FAILURE;
+    }
+    longPtr[0] = NULL; // pointer list is terminated by NULL
+        
+    /**
+     * Populate our opt lists
+     */
+    int longCount = 0;
+    for(int i = 2; i < argc; i++) {
+        char *const curArg = argv[i];
+        const int type = optType(curArg);
+        if(type == LONG) {
+            char *const longOpt =
+                (char *)malloc(strlen(curArg) - 1); // +1 (for '\0'), -2 (for --) = -1
+            
+            strcpy(longOpt, &curArg[2]); // copy Opt from --Opt
+            longPtr[longCount] = longOpt;
+            longPtr[longCount+1] = NULL;
+            longCount++;
+        }
+        else if(type == SHORT) {
+            strcat(smallPtr, &curArg[1]);
+        }
+    }
+    
+    return SUCCESS;
 }
 
 /**
@@ -235,7 +291,7 @@ bool isEmptySpace(char *line) {
     return true;
 }
 
-int same(char *strA, char *strB)
+bool same(char *strA, char *strB)
 {
     return !strcmp(strA, strB);
 }
@@ -274,12 +330,12 @@ bool stringHasArg(char *const string, char *list)
 }
 
 
-int stringHasLongOpt(char *const string, char *opt)
+bool stringHasLongOpt(char *const string, char *opt)
 {
     char *const copy = copyString(string);
     char *token = strtok(copy, " ,;\n");
     while(token != NULL) {
-        if(token[0] && token[0] == '-' && token[1] && token[1] == '-' && token[2]) { // less pretty than strlen, but simpler
+        if(strlen(token) >= 3 && token[0] == '-' && token[1] == '-') { // less pretty than strlen, but simpler
             printf("[%s] v [%s]\n", &token[2], opt);
             if(same(&token[2], opt)) {
                 free(copy);
@@ -292,65 +348,10 @@ int stringHasLongOpt(char *const string, char *opt)
     return false;
 }
 
-int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
-{    
-    dbi("buildOptLists w argc", argc);
-    /**
-     * Allocate a string of length argc to hold the "small" options (-r, -A, etc).
-     * This one string will be a concatenation of each small opt.
-     */
-    *smallOpts = (char *)malloc(countSmallOpts(argc, argv) + 1); // max of argc-1 smallOpts + '\0'
-    
-    char *const smallPtr = *smallOpts; // convenience pointer
-    if(!smallPtr) {
-        printf("Malloc error, quitting.\n");
-        return FAILURE;
-    }
-    smallPtr[0] = '\0';
-    
-    /**
-     * Allocate an array of string pointers for "long" options (--quiet, --color=blue, etc)
-     * of size argc
-     */
-    *longOpts = (char **)malloc(sizeof(char *) * argc); // welcome to pointer hell
-    
-    char **longPtr = *longOpts; // convenience pointer
-    if(!longPtr) {
-        printf("Malloc error, quitting.\n");
-        return FAILURE;
-    }
-    longPtr[0] = NULL;
-    
-    db("    past mallocs");
-    
-    /**
-     * Populate our opt lists
-     */
-    int longCount = 0;
-    for(int i = 2; i < argc; i++) {
-        dbs("    arg: ", argv[i]);
-        dbi("        is argv", i);
-        char *const curArg = argv[i];
-        const int type = optType(curArg);
-        if(type == LONG) {
-            db("        is long opt");
-            char *const longOpt = (char *)malloc(strlen(curArg) - 1); // +1 (for '\0'), -2 (for --) = -1
-            
-            strcpy(longOpt, &curArg[2]); // copy Opt from --Opt
-            longPtr[longCount] = longOpt;
-            longPtr[longCount+1] = NULL;
-            longCount++;
-        }
-        else if(type == SHORT) {
-            db("        is short opt");
-            strcat(smallPtr, &curArg[1]);
-        }
-    }
-    
-    db("    returning from buildOptLists");
-    return SUCCESS;
-}
 
+/**
+ * Given argv, 
+ */
 int countSmallOpts(int argc, char *argv[])
 {
     int count = 0;
@@ -360,7 +361,6 @@ int countSmallOpts(int argc, char *argv[])
             count += strlen(&curArg[1]);
         }
     }
-    dbi("counted", count);
     return count;
 }
 
@@ -372,22 +372,4 @@ void freeList(char **list)
     }
     free(list);
     
-}
-
-void db(char *message)
-{
-    if(DEBUG)
-        printf("[debug] %s\n", message);
-}
-
-void dbi(char *message, int i)
-{
-    if(DEBUG)
-        printf("[debug] %s: %d\n", message, i);
-}
-
-void dbs(char *message, char *string)
-{
-    if(DEBUG)
-        printf("[debug] %s %s\n", message, string);
 }
