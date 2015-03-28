@@ -7,9 +7,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-
-#define TRUE 1
-#define FALSE 0
+#include <stdbool.h>
 
 #define SHORT 0
 #define LONG 1
@@ -19,24 +17,6 @@
 
 #define SUCCESS 0
 #define FAILURE 1
-
-/*
- * Most man pages are formatted such that the description of the argument
- * is on the line AFTER the argument is stated.  For example, in the man
- * page for ls:
- * 
- *      -a, --all
- *              do not ignore entries starting with .
- *
- * Some man pages, however, start the description on the same line as the
- * argument.  For example, in the man page for Vim:
- *
- *      -A           If Vim has been compiled with Arabic support...
- *
- * 
- */
-#define LIMIT 30
-#define MORE 1
 
 int buildOptLists(int, char **, char **, char ***);
 //int buildArgsList(char *const, int, char **);
@@ -137,7 +117,7 @@ FILE *createTempManPage(char *command)
 //void parseManPage(char *args, FILE *fp)
 void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
 {
-    int inDescription = FALSE;
+    bool inDescription = false;
     char *lastLine = NULL;
     char *line = NULL;
     size_t len = 0;
@@ -150,7 +130,7 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
         else if(lastLine){
             if(inDescription) { // still in a multi-line description
                 if(isEmptySpace(line)) {
-                    inDescription = FALSE;
+                    inDescription = false;
                     printf("\n");
                 }
                 else {
@@ -168,23 +148,23 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
                 if(type != NA) {
                     if(type == LONG && listContains(longOpts, &token[2])) {
                         printf(lastLine);
-                        if(isEmptySpace(line) == FALSE) {
-                            inDescription = TRUE;
+                        if(isEmptySpace(line) == false) {
+                            inDescription = true;
                             printf(line);
                         }
                     }
                     else if(type == SHORT && strchr(smallOpts, token[1])) {
                         printf(lastLine);
-                        if(isEmptySpace(line) == FALSE) {
-                            inDescription = TRUE;
+                        if(isEmptySpace(line) == false) {
+                            inDescription = true;
                             printf(line);
                         }
                     }
                     
-                    else if(MORE && (lineMatchesList(lastLine, longOpts) || stringHasArg(lastLine, smallOpts))) {
+                    else if(lineMatchesList(lastLine, longOpts) || stringHasArg(lastLine, smallOpts)) {
                         printf(lastLine);
-                        if(isEmptySpace(line) == FALSE) {
-                            inDescription = TRUE;
+                        if(isEmptySpace(line) == false) {
+                            inDescription = true;
                             printf(line);
                         }
                     }
@@ -206,28 +186,28 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
 
 }
 
-int lineMatchesList(char *line, char **list)
+bool lineMatchesList(char *line, char **list)
 {
     char *copy = copyString(line);
     char *token = strtok(copy, " ,;\n");
     for(int i = 0; token != NULL && token[0] && token[0] == '-'; i++) {
         if(strlen(token) >= 3 && token[0] == '-' && token[1] == '-' && listContains(list, &token[2])) {
             free(copy);
-            return TRUE;
+            return true;
         }
         token = strtok(NULL, " ,;\n");
     }
     free(copy);
-    return FALSE;
+    return false;
 }
 
-int listContains(char **list, char *string)
+bool listContains(char **list, char *string)
 {
     for(int i = 0; list[i] != NULL; i++) {
         if(same(list[i], string))
-            return TRUE;
+            return true;
     }
-    return FALSE;
+    return false;
 }
 
 int optType(char *opt)
@@ -246,13 +226,13 @@ int optType(char *opt)
     return NA;
 }
 
-int isEmptySpace(char *line) {
+bool isEmptySpace(char *line) {
     while(line && *line != '\0') {
         if(*line != '\n' && *line != '\t' && *line != ' ')
-            return FALSE;
+            return false;
         line++;
     }
-    return TRUE;
+    return true;
 }
 
 int same(char *strA, char *strB)
@@ -269,28 +249,28 @@ char *copyString(char *original)
 }
 
 /*
- * Return TRUE iff string contains any of
+ * Return true iff string contains any of
  * the chars in list, preceded by -
  * Ex: if string is "-R, -r, --recursive"
  * and list is "qrs", returns true.
  */
-int stringHasArg(char *const string, char *list)
+bool stringHasArg(char *const string, char *list)
 {
     char *const copy = copyString(string);
     char *token = strtok(copy, " ");
     while(token != NULL) {
         if(token[0] != '-') {
             free(copy);
-            return FALSE;
+            return false;
         }
         else if(token[1] && strchr(list, token[1])) {
             free(copy);
-            return TRUE;
+            return true;
         }
         token = strtok(NULL, " ");
     }
     free(copy);
-    return FALSE;
+    return false;
 }
 
 
@@ -303,13 +283,13 @@ int stringHasLongOpt(char *const string, char *opt)
             printf("[%s] v [%s]\n", &token[2], opt);
             if(same(&token[2], opt)) {
                 free(copy);
-                return TRUE;
+                return true;
             }
         }
         token = strtok(NULL, " ,;");
     }
     free(copy);
-    return FALSE;
+    return false;
 }
 
 int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
