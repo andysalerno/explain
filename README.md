@@ -13,22 +13,51 @@ Using this tool, if you want to see what a command is going to do before running
 
 Examples
 --------
-    $ explain ls -alh --author
-    ls - list directory contents
-    -a, --all
-           do not ignore entries starting with .
+    [andy@localhost explain]$ ls -alh --author
+       ls - list directory contents
+       -a, --all
+              do not ignore entries starting with .
 
-    --author
-           with -l, print the author of each file
+       --author
+              with -l, print the author of each file
 
-    -h, --human-readable
-           with -l, print sizes in human readable format (e.g., 1K 234M 2G)
+       -h, --human-readable
+              with -l, print sizes in human readable format (e.g., 1K 234M 2G)
 
-    -l     use a long listing format
+       -l     use a long listing format
+
+
+    [andy@localhost explain]$ ./explain.out tar -zxv
+       tar - an archiver tool
+       -x, --extract, --get
+              extract files from an archive
+
+       -z, --gzip, --gunzip, --ungzip
+              filter the archive through gzip
+
+       -v, --verbose
+              verbosely list files processed
 
 How it works
 ------------
 Explain actually invokes the man command as if you typed it yourself.  It caches the output to the /tmp directory, so subsequent calls to the same man page will not require re-opening the page (until /tmp is cleared).  Then it parses what it found line by line, searching for the arguments you included, printing them if it finds any.
+
+Known Bugs
+----------
+Explain doesn't have an intelligent engine behind the lines it prints--it considers any line that begins with a dash to be a potential option description.  For example, the following is undesired output:
+
+    [andy@localhost explain]$ ./explain.out tar -f
+           tar - an archiver tool
+           --format=gnu  -f-  -b20  --quoting-style=escape  --rmt-command=/sbin/rmt   --rsh-com‐
+       mand=/usr/bin/rsh
+
+           -f, --file=ARCHIVE
+                  use archive file or device ARCHIVE
+
+           -f, --file=ARCHIVE
+                  use archive file or device ARCHIVE
+
+The long ugly line is printed because it starts with a dash, and contains '-f,' so it appears like it should be a match when it really isn't.  The duplicate -f description is printed simply because it appears in the man page twice. The second problem can be solved easily, the first one might just be the reality of having no absolute standard for man page formatting.
 
 But wait...
 -----------
