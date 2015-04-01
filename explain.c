@@ -19,16 +19,16 @@
 int buildOptLists(int, char **, char **, char ***);
 bool same(char *, char*);
 FILE *createTempManPage(char *);
-void parseManPage(FILE *, char *, char **);
+void printOptions(FILE *, char *, char **);
 char *copyString(char *);
 bool isEmptySpace(char *);
-bool stringHasArg(char *const string, char *list);
+bool lineHasShortOpt(char *const string, char *list);
 int optType(char *opt);
 bool stringHasLongOpt(char *const string, char *opt);
 bool listContains(char **list, char *string);
 void freeList(char **list);
 int countSmallOpts(int argc, char *argv[]);
-bool lineMatchesList(char *line, char **list);
+bool lineHasLongOpt(char *line, char **list);
 
 
 int main(int argc, char *argv[])
@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
     
-    char *smallOpts = NULL; // -a, -abc, etc
+    char *smallOpts = NULL;  // -a, -abc, etc
     char **longOpts = NULL;  // --std=c99, --silent, etc
     if(buildOptLists(argc, argv, &smallOpts, &longOpts) > 0) {
         return FAILURE;
@@ -47,11 +47,10 @@ int main(int argc, char *argv[])
     FILE *manPage = createTempManPage(argv[1]);
     
     if(manPage) {
-        parseManPage(manPage, smallOpts, longOpts);
+        printOptions(manPage, smallOpts, longOpts);
         fclose(manPage);
-    } else {
-        printf("Error creating temporary file. Aborting.\n");
     }
+    
     free(smallOpts);
     freeList(longOpts);
 }
@@ -124,8 +123,8 @@ int buildOptLists(int argc, char *argv[], char **smallOpts, char **longOpts[])
  * page is found. Then it outputs the result
  * of calling "man [command]" to the temp file.
  *
- * Returns an (unclosed) file pointer to the
- * created temp file.
+ * Returns a file pointer to the
+ * created temp file (must be closed later)
  */
 FILE *createTempManPage(char *command)
 {
@@ -134,7 +133,6 @@ FILE *createTempManPage(char *command)
     char tmpFile[strlen(tempLocation) + strlen(command) + 1];
     strcpy(tmpFile, tempLocation);
     strcat(tmpFile, command);
-    printf("temp file: %s\n", tmpFile);
     
     pid_t pID = fork();
     
@@ -150,7 +148,6 @@ FILE *createTempManPage(char *command)
             close(file);
             execlp("man", "man", command, (char *) NULL);
         }
-        printf("tmp file already existed!\n");
         return NULL;
     }
     
@@ -158,7 +155,6 @@ FILE *createTempManPage(char *command)
     else {
         int status;
         waitpid(pID, &status, 0);
-        printf("finished. status: %d\n", status);
         
         FILE *fp;
         fp = fopen(tmpFile, "r");
@@ -170,12 +166,19 @@ FILE *createTempManPage(char *command)
     }
 }
 
-//void parseManPage(char *args, FILE *fp)
-void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
+/**
+ * Parses through the temp man page file in search for
+ * any options matching those in string smallOpts or
+ * those in list longOpts.
+ *
+ * Will print out the line containing the option as well as
+ * all following lines making up the description.
+ */
+void printOptions(FILE *fp, char *smallOpts, char **longOpts)
 {
     bool inDescription = false;
-    char *lastLine = NULL;
-    char *line = NULL;
+    char *lastLine = NULL; // the "lookbehind" line. Holds copy of previous line
+    char *line = NULL;     // the current line
     size_t len = 0;
     ssize_t read;
     
@@ -183,80 +186,80 @@ void parseManPage(FILE *fp, char *smallOpts, char **longOpts)
         if(lastLine && same(lastLine, "NAME\n")) {
             printf("%s", line);
         }
-        else if(lastLine){
-            if(inDescription) { // still in a multi-line description
-                if(isEmptySpace(line)) {
-                    inDescription = false;
-                    printf("\n");
-                }
-                else {
-                    //some man pages have the description on the same
-                    //line as the argument (eg: -c    will do a copy)
-                    //
-                    printf("%s", line);
-                }
+        if(!lastLine) {
+            lastLine = copyString(line);
+            continue;
+        }
+        if(inDescription) { // still in a multi-line description
+            if(isEmptySpace(line)) {
+                inDescription = false;
+                printf("\n");
             }
             else {
-                char linecp[strlen(lastLine) + 1];
-                strcpy(linecp, lastLine);
-                char *token = strtok(linecp, " \t\n"); // first token of lastLine
-                const int type = optType(token);
-                if(type != NA) {
-                    if(type == LONG && listContains(longOpts, &token[2])) {
-                        printf(lastLine);
-                        if(isEmptySpace(line) == false) {
-                            inDescription = true;
-                            printf(line);
-                        }
-                    }
-                    else if(type == SHORT && strchr(smallOpts, token[1])) {
-                        printf(lastLine);
-                        if(isEmptySpace(line) == false) {
-                            inDescription = true;
-                            printf(line);
-                        }
-                    }
-                    
-                    else if(lineMatchesList(lastLine, longOpts) || stringHasArg(lastLine, smallOpts)) {
-                        printf(lastLine);
-                        if(isEmptySpace(line) == false) {
-                            inDescription = true;
-                            printf(line);
-                        }
-                    }
+                printf("%s", line);
+            }
+        }
+        else {
+            char linecp[strlen(lastLine) + 1];
+            strcpy(linecp, lastLine);
+            char *token = strtok(linecp, " \t\n"); // first token of lastLine
+            const int type = optType(token);
+
+            if(type != NA && (lineHasLongOpt(lastLine, longOpts)
+                              || lineHasShortOpt(lastLine, smallOpts))) {
+                printf(lastLine);
+                if(!isEmptySpace(line)) {
+                    inDescription = true;
+                    printf(line);
                 }
             }
         }
-        
-        if(lastLine) {
-            free(lastLine);
-            
-        }
+        free(lastLine);
         lastLine = copyString(line);
     }
     
     free(line);
     free(lastLine);
-    
-    
-
 }
 
-bool lineMatchesList(char *line, char **list)
+/**
+ * Return true iff line contains any of the strings in list
+ * This method reads through line in search for long options
+ * (--option) and returns true if list contains any matches.
+ *
+ * This method only reads as long as each token begins with '-'
+ * and stops when it reaches one that doesn't.
+ * This is because man pages tend to have lists of different
+ * synonymous options, such as:
+ * -R, -r, --recursive
+ *
+ * This method would detect '--recursive' in the above example. 
+ */
+bool lineHasLongOpt(char *line, char **list)
 {
     char *copy = copyString(line);
     char *token = strtok(copy, " ,;\n");
-    for(int i = 0; token != NULL && token[0] && token[0] == '-'; i++) {
-        if(strlen(token) >= 3 && token[0] == '-' && token[1] == '-' && listContains(list, &token[2])) {
+    int len = strlen(token);
+    for(int i = 0; token && len > 1 && token[0] == '-'; i++) {
+        if(len >= 3 && token[0] == '-' && token[1] == '-' && listContains(list, &token[2])) {
             free(copy);
             return true;
         }
         token = strtok(NULL, " ,;\n");
+        if(token)
+            len = strlen(token);
+        else
+            len = 0;
     }
     free(copy);
     return false;
 }
 
+/**
+ * Return true iff list contains string.
+ * List is expected to be terminated with
+ * NULL pointer.
+ */
 bool listContains(char **list, char *string)
 {
     for(int i = 0; list[i] != NULL; i++) {
@@ -266,22 +269,34 @@ bool listContains(char **list, char *string)
     return false;
 }
 
+/**
+ *  Return macro LONG, SHORT, or NA:
+ *
+ *  LONG iff opt has length > 2 and begins with '--'
+ *  SHORT iff opt has length >=2 and begins with '-'
+ *  NA otherwise
+ */
 int optType(char *opt)
 {
-    if(!opt || strlen(opt) < 1) {
+    if(!opt)
+        return NA;  
+    const int len = strlen(opt); //tofix: check null before doing strlen
+    if(!opt || len < 1) {
         return NA;
     }
-    const int len = strlen(opt);
     if (len > 2 && opt[0] == '-' && opt[1] == '-') {
         return LONG;
     }
     else if (len >= 2 && opt[0] == '-') {
         return SHORT;
     }
-    
     return NA;
 }
 
+/**
+ *  Return true iff line contains only empty space
+ *  (has only spaces, tabs, or newline chars)
+ */
 bool isEmptySpace(char *line) {
     while(line && *line != '\0') {
         if(*line != '\n' && *line != '\t' && *line != ' ')
@@ -291,11 +306,18 @@ bool isEmptySpace(char *line) {
     return true;
 }
 
+/**
+ * Convenience method. Same as strcmp but returns bool values.
+ */
 bool same(char *strA, char *strB)
 {
     return !strcmp(strA, strB);
 }
 
+/**
+ * Return a pointer to a newly allocated
+ * copy of the input string. (Must be freed later)
+ */
 char *copyString(char *original)
 {
     char *copy = (char *)malloc(strlen(original) + 1);
@@ -310,11 +332,11 @@ char *copyString(char *original)
  * Ex: if string is "-R, -r, --recursive"
  * and list is "qrs", returns true.
  */
-bool stringHasArg(char *const string, char *list)
+bool lineHasShortOpt(char *const string, char *list)
 {
     char *const copy = copyString(string);
-    char *token = strtok(copy, " ");
-    while(token != NULL) {
+    char *token = strtok(copy, " ,;");
+    while(token && strlen(token) >= 2) {
         if(token[0] != '-') {
             free(copy);
             return false;
@@ -323,26 +345,28 @@ bool stringHasArg(char *const string, char *list)
             free(copy);
             return true;
         }
-        token = strtok(NULL, " ");
+        token = strtok(NULL, " ,;");
     }
     free(copy);
     return false;
 }
 
-
+/**
+ * Return true iff string contains the option as a substring.
+ * Opt should be formatted --option (the -- will be stripped).
+ */
 bool stringHasLongOpt(char *const string, char *opt)
 {
     char *const copy = copyString(string);
     char *token = strtok(copy, " ,;\n");
     while(token != NULL) {
-        if(strlen(token) >= 3 && token[0] == '-' && token[1] == '-') { // less pretty than strlen, but simpler
-            printf("[%s] v [%s]\n", &token[2], opt);
+        if(strlen(token) >= 3 && token[0] == '-' && token[1] == '-') {
             if(same(&token[2], opt)) {
                 free(copy);
                 return true;
             }
         }
-        token = strtok(NULL, " ,;");
+        token = strtok(NULL, " ,;\n");
     }
     free(copy);
     return false;
@@ -350,7 +374,8 @@ bool stringHasLongOpt(char *const string, char *opt)
 
 
 /**
- * Given argv, 
+ * Return the amount of "small" options found in argv.
+ * Ex: argv of {explain, ls, -a, -b, -c, -def} returns 6.
  */
 int countSmallOpts(int argc, char *argv[])
 {
@@ -364,6 +389,9 @@ int countSmallOpts(int argc, char *argv[])
     return count;
 }
 
+/**
+ * Free a list of strings, along with the strings it contains.
+ */
 void freeList(char **list)
 {
     for(int i = 0; list[i] != NULL; i++) {
@@ -371,5 +399,4 @@ void freeList(char **list)
         
     }
     free(list);
-    
 }
