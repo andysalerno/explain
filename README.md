@@ -13,7 +13,7 @@ Using this tool, if you want to see what a command is going to do before running
 
 Examples
 --------
-    [andy@localhost explain]$ ls -alh --author
+    [andy@localhost explain]$ explain ls -alh --author
        ls - list directory contents
        -a, --all
               do not ignore entries starting with .
@@ -27,7 +27,7 @@ Examples
        -l     use a long listing format
 
 
-    [andy@localhost explain]$ ./explain.out tar -zxv
+    [andy@localhost explain]$ explain tar -zxv
        tar - an archiver tool
        -x, --extract, --get
               extract files from an archive
@@ -46,7 +46,7 @@ Known Bugs
 ----------
 Explain doesn't have an intelligent engine behind the lines it prints--it considers any line that begins with a dash to be a potential option description.  For example, the following is undesired output:
 
-    [andy@localhost explain]$ ./explain.out tar -f
+    [andy@localhost explain]$ explain tar -f
            tar - an archiver tool
            --format=gnu  -f-  -b20  --quoting-style=escape  --rmt-command=/sbin/rmt   --rsh-com‐
        mand=/usr/bin/rsh
