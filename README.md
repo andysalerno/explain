@@ -11,6 +11,10 @@ The motivation for this project is twofold:
 
 Using this tool, if you want to see what a command is going to do before running it, you need only pass it in.
 
+Installing
+----------
+Just compile it with make and put the output somewhere your PATH variable knows about.
+
 Examples
 --------
     [andy@localhost explain]$ explain ls -alh --author
