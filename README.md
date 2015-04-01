@@ -7,9 +7,11 @@ The motivation for this project is twofold:
 
 1. I wanted to write something in C, for practice and fun
 
-2. I was annoyed at so-called 'tutorials' that just list the commands they want you to run without telling you what they're really doing.
+2. I was annoyed by so-called Linux 'tutorials' that just list the commands they want you to run without telling you what they're really doing.
 
 Using this tool, if you want to see what a command is going to do before running it, you need only pass it in.
+
+You can also use it to double-check options if you've forgotten.  For instance, if you want to use tar to zip something up but forgot if it's -zxvrf or -qrstuvwqyz or whatever it is.
 
 Installing
 ----------
