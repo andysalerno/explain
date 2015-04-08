@@ -33,7 +33,7 @@ bool lineHasLongOpt(char *line, char **list);
 
 int main(int argc, char *argv[])
 {
-    if(argc < 3) {
+    if(argc < 2) {
         printf("Usage: explain command opt1 opt2 opt3...\n");
         exit(1);
     }
@@ -232,8 +232,6 @@ void printOptions(FILE *fp, char *smallOpts, char **longOpts)
  * This is because man pages tend to have lists of different
  * synonymous options, such as:
  * -R, -r, --recursive
- *
- * This method would detect '--recursive' in the above example. 
  */
 bool lineHasLongOpt(char *line, char **list)
 {
@@ -280,7 +278,7 @@ int optType(char *opt)
 {
     if(!opt)
         return NA;  
-    const int len = strlen(opt); //tofix: check null before doing strlen
+    const int len = strlen(opt);
     if(!opt || len < 1) {
         return NA;
     }
