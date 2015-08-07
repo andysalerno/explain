@@ -1,3 +1,5 @@
+Note: explain has been re-written in Python 3 as explain-py.  That project is hosted [here](https://github.com/andysalerno/explain-py).  Explain in C will probably not be updated again.
+
 Explain
 =======
 
@@ -72,3 +74,5 @@ But wait...
 Yes, this program is very 'scriptable,' and I'm sure I could have done it in Python in a quarter of the lines and a third of the time.  The reason I wanted to do it in C is listed above under 'motivation.'
 
 ...also, for some reason the theme of this program fits C, for whatever that's worth.
+
+(UPDATE: of course, there is now a Python version.)
